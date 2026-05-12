@@ -59,6 +59,7 @@ import { groupExportHandler } from './operations/groupexport';
 import { appLaunchHandler } from './operations/launch';
 import { patientEverythingHandler } from './operations/patienteverything';
 import { rfsCreateDraftHandler } from '../rfs/operations/create-draft';
+import { rfsCompleteHandler } from '../rfs/operations/complete';
 import { patientSummaryHandler } from './operations/patientsummary';
 import { planDefinitionApplyHandler } from './operations/plandefinitionapply';
 import { projectCloneHandler } from './operations/projectclone';
@@ -436,6 +437,7 @@ function initInternalFhirRouter(): FhirRouter {
 
   // CalMHSA Request-for-Services (TS-26)
   router.add('POST', '/$rfs-create-draft', rfsCreateDraftHandler);
+  router.add('POST', '/$rfs-complete', rfsCompleteHandler);
 
   return router;
 }
