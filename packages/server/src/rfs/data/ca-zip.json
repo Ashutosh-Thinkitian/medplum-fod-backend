@@ -1,0 +1,22 @@
+{
+  "95112": {"city": "San Jose", "county": "Santa Clara"},
+  "94102": {"city": "San Francisco", "county": "San Francisco"},
+  "94103": {"city": "San Francisco", "county": "San Francisco"},
+  "94104": {"city": "San Francisco", "county": "San Francisco"},
+  "94105": {"city": "San Francisco", "county": "San Francisco"},
+  "94110": {"city": "San Francisco", "county": "San Francisco"},
+  "90001": {"city": "Los Angeles", "county": "Los Angeles"},
+  "90012": {"city": "Los Angeles", "county": "Los Angeles"},
+  "90028": {"city": "Los Angeles", "county": "Los Angeles"},
+  "92101": {"city": "San Diego", "county": "San Diego"},
+  "92103": {"city": "San Diego", "county": "San Diego"},
+  "95814": {"city": "Sacramento", "county": "Sacramento"},
+  "95816": {"city": "Sacramento", "county": "Sacramento"},
+  "94601": {"city": "Oakland", "county": "Alameda"},
+  "94705": {"city": "Berkeley", "county": "Alameda"},
+  "92660": {"city": "Newport Beach", "county": "Orange"},
+  "92868": {"city": "Orange", "county": "Orange"},
+  "93701": {"city": "Fresno", "county": "Fresno"},
+  "93401": {"city": "San Luis Obispo", "county": "San Luis Obispo"},
+  "95060": {"city": "Santa Cruz", "county": "Santa Cruz"}
+}
