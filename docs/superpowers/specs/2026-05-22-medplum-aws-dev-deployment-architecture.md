@@ -5,7 +5,7 @@
 **AWS Account:** Development (039612846297)
 **Route 53 zone:** calmhsa-works.dev
 **Deployment method:** Official Medplum CDK (`@medplum/cdk`)
-**Date:** 2026-05-22
+**Date:** 2026-05-22 (updated 2026-05-25: SES added)
 
 ---
 
@@ -65,7 +65,11 @@ flowchart TB
         subgraph Ops["Observability & Secrets"]
             CW["CloudWatch Logs"]
             SM["Secrets Manager<br/>(DB creds)"]
-            SSM["SSM Parameter Store<br/>(~13 params)"]
+            SSM["SSM Parameter Store<br/>(~15 params)"]
+        end
+
+        subgraph Email["Email (SES)"]
+            SES["AWS SES<br/>(production mode)<br/>from: no-reply@calmhsa-works.dev"]
         end
     end
 
@@ -106,6 +110,9 @@ flowchart TB
 
     Task1 -.egress.-> NAT
     Task2 -.egress.-> NAT
+
+    Task1 -.sends email.-> SES
+    Task2 -.sends email.-> SES
 ```
 
 ---
@@ -163,10 +170,18 @@ sequenceDiagram
 | DNS              | Route 53 records (existing zone)    | 3× A/Alias                    |
 | TLS              | ACM certs                           | 3× (all us-east-1)            |
 | Security         | WAF (default rules)                 | attached to ALB + CF          |
-| Secrets          | Secrets Manager + SSM Param Store   | ~13 params                    |
+| Secrets          | Secrets Manager + SSM Param Store   | ~15 params                    |
 | Logs             | CloudWatch Log Groups               | server + ALB                  |
+| Email            | AWS SES (production mode)           | verified domain + IAM policy  |
 
-**Out of scope (explicitly):** SES, Bot Lambda Layer, ClamAV antivirus, RDS Proxy, RDS reader, Fargate autoscaling, multi-AZ failover.
+**Out of scope (explicitly):** Bot Lambda Layer, ClamAV antivirus, RDS Proxy, RDS reader, Fargate autoscaling, multi-AZ failover.
+
+**Added 2026-05-25:** AWS SES (transactional email) — verified `calmhsa-works.dev`,
+out of sandbox, sending from `no-reply@calmhsa-works.dev`. Used for Medplum
+invitation and password-reset emails only. See [the SES setup section](#email-aws-ses)
+below for the full configuration. The deferred compliance TODOs (BAA, log
+retention, bounce monitoring, SPF/DMARC) are tracked in
+`~/CalMHSA/my-medplum-cdk-config/README.md`.
 
 ---
 
@@ -191,6 +206,7 @@ sequenceDiagram
 | CloudWatch Logs                    | ~5 GB ingest + retention            | ~$5           |
 | Secrets Manager + SSM              | ~5 secrets + 13 params              | ~$3           |
 | WAF                                | 1 WebACL + few rules                | ~$8           |
+| SES (transactional email)          | <100 emails/mo (invites + resets)   | <$0.01        |
 | Data transfer (misc)               | inter-AZ + egress                   | ~$5           |
 | **Total (24×7)**                   |                                     | **≈ $200–$230/mo** |
 
@@ -215,6 +231,62 @@ This is doable with a scheduled Lambda or just `aws ecs update-service --desired
 | Skip WAF for dev                            | ~$8/mo   | Lower security posture                 |
 
 Realistic optimized dev cost: **~$140–$160/mo** with all above applied.
+
+---
+
+## Email (AWS SES)
+
+Added 2026-05-25. Used by Medplum for invitation and password-reset emails only.
+
+### Configuration
+
+| Item | Value |
+|---|---|
+| Region | us-east-1 |
+| Sending identity (domain) | `calmhsa-works.dev` (DKIM-signed, verified) |
+| From address | `no-reply@calmhsa-works.dev` |
+| Sandbox status | **Production mode** (approved 2026-05-25; 50,000/day, 14/sec) |
+| Medplum config (SSM) | `/medplum/MedplumDev/supportEmail`, `/medplum/MedplumDev/approvedSenders` (both `SecureString`) |
+| IAM permission | Inline policy `MedplumSesSend` on Fargate task role — `ses:SendEmail` + `ses:SendRawEmail` with `ses:FromAddress` condition |
+
+### Request flow (email send)
+
+```
+Medplum server (Fargate)
+   │  signs request with task-role IAM creds
+   ▼
+AWS SES API (us-east-1)
+   │  DKIM-sign with calmhsa-works.dev key
+   ▼
+Recipient mail server (Gmail/Outlook/etc.)
+   │  delivers to inbox
+   ▼
+User clicks link → lands on https://medplum-app.calmhsa-works.dev/
+```
+
+### HIPAA posture (current scope: invites + resets only)
+
+| Concern | Status |
+|---|---|
+| Email content contains PHI? | ❌ No — generic notification + portal link only |
+| TLS in transit (Medplum → SES) | ✅ Always (AWS API) |
+| TLS in transit (SES → recipient) | ⚠️ Opportunistic (acceptable since no PHI) |
+| AWS BAA accepted | ⚠️ **Deferred** — see TODO-1 in CDK README |
+| Bounce/complaint monitoring | ⚠️ **Deferred** — see TODO-3 in CDK README |
+| SPF + DMARC DNS records | ⚠️ **Deferred** — see TODO-4 in CDK README |
+| CloudWatch retention ≥ 6 years | ⚠️ **Deferred** — see TODO-2 in CDK README |
+
+**Hard rule for this stack:** No PHI in any outbound email. PHI is viewed
+inside the authenticated portal, never delivered via SMTP. If a future
+feature requires emailing PHI, requires re-evaluation of SES config
+(TLS-required Configuration Set, AuditEvent per send, consent capture).
+
+### Caveat: IAM policy applied outside CDK
+
+The `MedplumSesSend` inline policy on the task role was attached via
+`aws iam put-role-policy`, **not** via CDK code. If a future `cdk deploy`
+strips it, emails will fail silently with `AccessDenied` in CloudWatch.
+TODO-5 in the CDK README tracks moving this into CDK source.
 
 ---
 
