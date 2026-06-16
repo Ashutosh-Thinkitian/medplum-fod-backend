@@ -81,6 +81,42 @@
 
 ---
 
+## F2-BOT — MDM Golden-Record & Link Management: **Medplum + Bots** vs HAPI FHIR
+
+> **Additive** — does NOT replace the F2 table above (which is Medplum's *built-in*, all-zero). This is the result of a custom Bot subsystem ([bots/golden-record-mdm/](../bots/golden-record-mdm/)) mapped to the CalMHSA criteria in `CalMHSA-FOD: FHIR-Platform-Requirements-Specification.md` **§3.2 (MDM)** + **§1.4** — see [docs/medplum-bots-f2-mdm-feasibility.md](medplum-bots-f2-mdm-feasibility.md) for the requirement-by-requirement analysis.
+>
+> **Status: BUILT + UNIT-VERIFIED (2026-06-15), NOT yet live on a server.** The `golden-record-mdm` Bot is implemented with **65 passing unit tests** (Vitest + MockClient) and a clean CJS build — the *logic* is proven. It is **not yet deployed/run against a real Medplum** (user deploys to dev manually; F2 live curls are in `bots/golden-record-mdm/LOCAL-TEST.md`). So scores below are **unit-verified, not live-verified** (contrast F1-BOT, which is live-verified). Score: 2 = functional parity, 1 = functional-but-not-drop-in (custom endpoint vs standard `$mdm-*` op), 0 = not built.
+>
+> ⚠️ **COVERAGE GAP — this section maps 10 rows; the F2 table above has 13.** The bot covers these 10. Of the original 13-row F2 list: **F2.11 (`$mdm-not-duplicate`) IS built** (folded into F2.8 below), **F2.13 (config-driven rules) is partial** (folded into F2.9 — thresholds/SoR via `Bot.secrets`, algorithm in code), and **F2.12 (`$mdm-submit`/`$mdm-clear` batch re-run / clear) is NOT built** — a known gap, deferred. So the bot does **not** cover 100% of the 13-row sheet; the missing capability is bulk re-run / clear.
+
+| Feature ID | Feature | Medplum + Bots — Behaviour | M+Bot Score | HAPI FHIR — Behaviour | HAPI Score | Winner | Importance | Effort | Spec criterion |
+|---|---|---|---|---|---|---|---|---|---|
+| F2.1 | Golden / master record + `_tag` search | ✅ **built** (`golden.ts` `createGolden`): golden Patient tagged `GOLDEN_RECORD`+`CALMHSA-MDM` + EID; `_tag` search native | 2 | Built-in: auto golden + `_tag` search (live total:10) | 2 | Tie | High | Low | R1 (§1.4) |
+| F2.2 | Auto-link on patient creation (survivorship) | ✅ **built** (`operations/link.ts`): matcher + `Patient.link seealso` + survivorship recompute; MATCH auto-links, POSSIBLE→review queue. (Subscription wires it on ingest.) | 2 | Built-in: auto-link `linkSource=AUTO`, score 1.0 | 2 | Tie | High | Med–High | R8, R2 |
+| F2.3 | Inspect links — `$mdm-query-links` | ⚠️ **built** (`operations/query-links.ts`) — returns links w/ grade/source/score, but **custom `$execute` endpoint, not the `$mdm-query-links` op** | 1 | Built-in `$mdm-query-links` operation | 2 | HAPI | High | Low–Med | R6 |
+| F2.4 | Manual link create — `$mdm-create-link` | ⚠️ **built** (`operations/create-link.ts`) MANUAL link — functional, **custom contract** | 1 | Built-in `$mdm-create-link` operation | 2 | HAPI | Medium | Low–Med | R3 |
+| F2.5 | Manual override / re-grade — `$mdm-update-link` | ⚠️ **built, PROPOSE-ONLY** (`operations/update-link.ts`): creates a Task for human approval, mutates nothing; **custom op** | 1 | Built-in `$mdm-update-link` (AUTO→MANUAL lock) | 2 | HAPI | High | Med–High | R3 |
+| F2.6 | Link history / audit — `$mdm-link-history` | ✅ **built** (`audit.ts`): `AuditEvent` per link change; searchable | 2 | Built-in `$mdm-link-history` operation | 2 | Tie | Medium | Low | R3 |
+| F2.7 | Duplicate-golden detection — `$mdm-duplicate-golden-resources` | ✅ **built** (`operations/find-duplicates.ts`): scans goldens, flags dup pairs (cron-runnable) | 2 | Built-in `$mdm-duplicate-golden-resources` (live total:0) | 2 | Tie | High | Med | R3 |
+| F2.8 | Resolve dup goldens — `$mdm-merge` + `$mdm-not-duplicate` (=sheet F2.11) | ⚠️ **built:** `not-duplicate` works (marker); `merge` is **PROPOSE-ONLY** (Task, no execution — highest clinical risk); custom ops | 1 | Built-in `$mdm-merge-golden-resources` + `$mdm-not-duplicate` | 2 | HAPI | Medium | High | R3 |
+| F2.9 | Config-driven MDM rules (=sheet F2.13) | ⚠️ **partial, built:** thresholds + SoR priority via `Bot.secrets` (no redeploy); **matching algorithm stays code** | 1 | `mdm-rules.json` externalises matchers + thresholds | 2 | HAPI | High | Med | R7 |
+| F2.10 | Works on deployed server | ⚠️ **unit-verified, not yet live:** CJS bundle builds + `handler` resolves; deploy script ready; **user deploys to dev manually** | 1 | Full MDM op suite live (MDM module enabled) | 2 | HAPI | Medium | — | R8 |
+| — F2.12 | Batch/reset — `$mdm-submit` / `$mdm-clear` | ❌ **NOT built** — bulk re-run / clear-links is a deferred gap | 0 | Built-in `$mdm-submit` + `$mdm-clear` | 2 | HAPI | Medium | Med | (deferred) |
+
+**F2-BOT subtotal:** Medplum + Bots **≈ 13/22** / HAPI **22/22**. Of the 11 rows shown: 4 full ✅ (F2.1, F2.2, F2.6, F2.7), 6 functional-but-custom/partial ⚠️ (F2.3–F2.5, F2.8, F2.9, F2.10), 1 not built ❌ (F2.12). (F2.10 dropped to ⚠️/1 because it's unit-verified, not yet live; it becomes ✅/2 once you run it on dev.)
+
+**Hard dependency (not Bot-fixable):** runtime **custom SearchParameters + `$reindex`** — ❌ a Medplum **platform gap** (§3.1, confirmed Dec 2024). Bounds query scale; doesn't block the core lifecycle.
+
+### Verdict for F2 with Bots
+- **Built and unit-verified, not yet live.** The `golden-record-mdm` Bot (65 passing unit tests, clean build) implements 10 of the 13 F2 rows. The *logic* is proven against MockClient; **live verification on dev is the remaining step** (deploy script + F2 curls in `bots/golden-record-mdm/LOCAL-TEST.md`).
+- **Honest coverage of the 13-row sheet:** ✅/⚠️ built for F2.1–F2.10, F2.11 (not-duplicate), F2.13 (config, partial). **❌ F2.12 (`$mdm-submit`/`$mdm-clear` bulk re-run / clear) is NOT built** — a deferred gap. So **this is not 100% of the sheet's AC**; one capability remains.
+- **The spec sanctions this path:** §3.2/§1.4 say *"Medplum requires custom Bot-based MDM"* and specify the golden mechanism as `Patient.link` type `seealso`. So a Bot-based F2 **meets the requirement** where built — it isn't a workaround.
+- **Permanent gaps vs HAPI (by design):** custom `$execute` endpoints instead of standard `$mdm-*` ops; no `:mdm` qualifier (`query-links` is the stand-in); matching algorithm is code, not config; merge/override are propose-only (executing them with approval+reversibility is a future phase); runtime custom SearchParameters/`$reindex` is a Medplum platform gap (§3.1).
+- **Two asterisks on "HAPI wins F2":** (1) HAPI MDM **does not work in Database Partition Mode (v8.0.0+)** — which CalMHSA's multi-tenancy (§1.1) may require; (2) **BH-specific tuning (R5)** is bespoke on *either* platform, and a Bot can fit CalMHSA's rules more precisely than HAPI's generic matchers.
+- **To reach 100% of the sheet + live parity:** (a) build F2.12 (submit/clear), (b) deploy to dev and convert F2.10 + the ⚠️ rows from unit-verified to live-verified.
+
+---
+
 ## FINAL VERDICT
 
 | Area | Medplum Score | HAPI Score | Winner |

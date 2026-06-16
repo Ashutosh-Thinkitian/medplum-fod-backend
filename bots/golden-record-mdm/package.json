@@ -1,0 +1,24 @@
+{
+  "name": "medplum-golden-record-mdm-bot",
+  "version": "1.0.0",
+  "description": "Bot-based MDM: golden records, auto-link, survivorship, review queue (F2)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "build": "tsc --noEmit && node esbuild-script.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "lint": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@medplum/cli": "5.1.13",
+    "@medplum/core": "5.1.13",
+    "@medplum/fhirtypes": "5.1.13",
+    "@medplum/mock": "5.1.13",
+    "@medplum/definitions": "5.1.13",
+    "@types/node": "22.10.2",
+    "esbuild": "0.24.0",
+    "typescript": "5.7.2",
+    "vitest": "2.1.8"
+  }
+}
